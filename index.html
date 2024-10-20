@@ -1,11 +1,35 @@
 <!DOCTYPE html>
 <html lang="en">
 
-
 <head>
   <meta charset="UTF-8">
   <title>CryptoZombies front-end</title>
   <link rel="icon" href="favicon.ico">
+  <style>
+    .zombie-image-container {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      margin-top: 20px;
+    }
+
+    .zombie-image {
+      width: 200px;
+      height: 200px;
+      margin: 10px;
+      border-radius: 10px;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+      transition: transform 0.3s ease;
+    }
+
+    .zombie-image:hover {
+      transform: scale(1.05);
+    }
+
+    .zombie {
+      margin-bottom: 20px;
+    }
+  </style>
   <script language="javascript" type="text/javascript"
     src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
   <script language="javascript" type="text/javascript"
@@ -16,13 +40,12 @@
 <body>
   <div id="txStatus"></div>
   <div id="zombies"></div>
-
+  <div id="zombieImages" class="zombie-image-container"></div>
   <button class="showZombieButton">Show Zombies</button>
   <button class="createzombieButton">Create Zombie</button>
   <button class="levelupButton">Level Up</button>
 
   <script>
-
     var cryptoZombies;
     var userAccount;
     const showZombieButton = document.querySelector('.showZombieButton');
@@ -30,23 +53,8 @@
     const levelupButton = document.querySelector('.levelupButton');
 
     function startApp() {
-
-      //ZombieOwnership contratc address
       var cryptoZombiesAddress = "0x2C6714DA480246951133B68d7A56a0a40407501d";
-
       cryptoZombies = new web3.eth.Contract(cryptoZombiesABI, cryptoZombiesAddress);
-
-
-      //the following code from Lesson 6, chapter 5 is obsolete
-      //     var accountInterval = setInterval(function () {
-
-      //      if (web3.eth.accounts[0] !== userAccount) {
-      //userAccount = web3.eth.accounts[0];
-
-      //     getZombiesByOwner(userAccount)
-      //      .then(displayZombies);
-      //  }
-      // }, 100);
 
       cryptoZombies.events.Transfer({ filter: { _to: userAccount } })
         .on("data", function (event) {
@@ -57,41 +65,26 @@
 
     function displayZombies(ids) {
       $("#zombies").empty();
+      $("#zombieImages").empty();
       for (id of ids) {
-
         getZombieDetails(id)
           .then(function (zombie) {
-
-
-            $("#zombies").append(`<div class="zombie">
-              <ul>
-                <li>Name: ${zombie.name}</li>
-                <li>DNA: ${zombie.dna}</li>
-                <li>Level: ${zombie.level}</li>
-                <li>Wins: ${zombie.winCount}</li>
-                <li>Losses: ${zombie.lossCount}</li>
-                <li>Ready Time: ${zombie.readyTime}</li>
-              </ul>
-            </div>`);
+            zombieToOwner(zombie.id).then(function (owner) {
+              displayZombie(zombie.id, zombie.name, zombie.dna, zombie.level, zombie.readyTime, zombie.winCount, zombie.lossCount, owner);
+            });
           });
       }
-
     }
 
     function createRandomZombie(name) {
-
-
       $("#txStatus").text("Creating new zombie on the blockchain. This may take a while...");
-
       return cryptoZombies.methods.createRandomZombie(name)
         .send({ from: userAccount })
         .on("receipt", function (receipt) {
           $("#txStatus").text("Successfully created " + name + "!");
-
           getZombiesByOwner(userAccount).then(displayZombies);
         })
         .on("error", function (error) {
-
           $("#txStatus").text(error);
         });
     }
@@ -121,8 +114,22 @@
         });
     }
 
+    function displayZombie(id, name, dna, level, readyTime, winCount, lossCount, owner) {
+      let zombieDiv = document.createElement("div")
+      zombieDiv.className = "zombie"
+      zombieDiv.innerHTML = `<p>Name: ${name}</p><p>DNA: ${dna}</p><p>Level: ${level}</p><p>Wins: ${winCount}</p><p>Losses: ${lossCount}</p><p>Ready Time: ${readyTime}</p><p>Owner: ${owner}</p>`
+      document.getElementById("zombies").appendChild(zombieDiv)
+
+      let zombieImg = document.createElement("img")
+      zombieImg.src = `https://robohash.org/${id}?set=set2&size=200x200`
+      zombieImg.alt = `Zombie ${name}`
+      zombieImg.className = "zombie-image"
+      document.getElementById("zombieImages").appendChild(zombieImg)
+    }
+
     function getZombieDetails(id) {
       return cryptoZombies.methods.zombies(id).call()
+        .then(zombie => ({ ...zombie, id }));
     }
 
     function zombieToOwner(id) {
@@ -134,46 +141,25 @@
     }
 
     window.addEventListener('load', async () => {
-      // Modern dapp browsers...
       if (window.ethereum) {
         window.web3 = new Web3(ethereum);
         try {
-          // Request account access if needed
           const accounts = await ethereum.enable();
-          // Acccounts now exposed
           userAccount = accounts[0];
           startApp()
         } catch (error) {
-          // User denied account access...
+          console.error("User denied account access")
         }
       }
-      // Legacy dapp browsers...
       else if (window.web3) {
         window.web3 = new Web3(web3.currentProvider);
-        // Acccounts always exposed
         userAccount = web3.eth.accounts[0];
         startApp()
       }
-      // Non-dapp browsers...
       else {
         console.log('Non-Ethereum browser detected. You should consider trying MetaMask!');
       }
     });
-
-    //the following code from Lesson 6, chapter 2 is obsolete
-    //metamask no longer inject web3 since early 2021
-    //window.addEventListener('load', function () {
-
-    //    if (typeof web3 !== 'undefined') {
-    //     web3js = new Web3(web3.currentProvider);
-    //   } else {
-
-    //  }
-
-
-    //  startApp()
-
-    //  }) 
 
     ethereum.on('accountsChanged', (accounts) => {
       window.location.reload();
@@ -183,25 +169,25 @@
       window.location.reload();
     });
 
-
     createzombieButton.addEventListener('click', () => {
       createRandomZombie(userAccount);
-
     });
 
     showZombieButton.addEventListener('click', () => {
       getZombiesByOwner(userAccount)
         .then(displayZombies);
-
     });
 
     levelupButton.addEventListener('click', () => {
       getZombiesByOwner(userAccount)
-        .then(levelUp);
-
+        .then(ids => {
+          if (ids.length > 0) {
+            levelUp(ids[0]);
+          } else {
+            $("#txStatus").text("You don't have any zombies to level up!");
+          }
+        });
     });
-
-
 
   </script>
 </body>
